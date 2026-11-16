@@ -1,0 +1,39 @@
+name: pericytest2
+channels:
+  - conda-forge
+  - bioconda
+dependencies:
+  - python=3.11
+  - numpy
+  - pandas
+  - scipy
+  - statsmodels
+  - scikit-learn
+  - matplotlib
+  - pyyaml
+  - openpyxl
+  - r-base=4.3
+  - r-yaml
+  - r-jsonlite
+  - r-data.table
+  - r-msigdbr
+  - bioconductor-limma
+  - bioconductor-edger
+  - bioconductor-sva
+  - bioconductor-fgsea
+  - bioconductor-affy
+  - bioconductor-hgu133plus2.db
+  - bioconductor-org.hs.eg.db
+  - bioconductor-annotationdbi
+  - pip
+  - pip:
+    - --extra-index-url https://download.pytorch.org/whl/cu121
+    - anndata==0.12.19
+    - cairosvg==2.9.1
+    - cellxgene-census==1.18.0
+    - pandas==2.3.3
+    - scanpy==1.11.5
+    - umap-learn==0.5.12
+    - scTAPE==1.1.2
+    - tiledbsoma==2.3.0
+    - torch==2.4.1+cu121

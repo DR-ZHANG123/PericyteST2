@@ -1,0 +1,10 @@
+/data/
+/results/
+/figures/
+/logs/
+__pycache__/
+*.pyc
+*.h5ad
+*.rds
+*.gz
+*.zip

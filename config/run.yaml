@@ -1,0 +1,134 @@
+# pericytest2 全部可调参数；脚本只从这里读取，不在代码里写死。
+seed: 22
+
+paths:
+  raw: data/raw
+  interim: data/interim
+  results: results
+
+magnet:
+  counts: data/raw/magnet/Counts.csv
+  pheno: data/raw/magnet/phenoData.csv
+  etiologies: [NF, DCM]          # 糖尿病只在 NF 与 DCM 中有足够例数（HCM 1 例、PPCM 0 例）
+  covariates: [sex, age, race, bmi, hypertension, rin, tin, pool]
+  min_count_group: 40            # filterByExpr 的 min.count 之外，至少多少个样本 CPM 达标
+  fdr: 0.05
+  candidate_genes: [TXNIP, ARRDC4, PDK4, HMGCS2, ANGPTL4, UCP3, CPT1A, PLIN5, SLC2A4,
+                    SLC2A1, FKBP5, NPPA, NPPB, ACTA1, MYH6, MYH7, POSTN, COL1A1, CD36, LPL]
+
+gse26887:
+  matrix: data/raw/gse26887/GSE26887_series_matrix.txt.gz
+
+retina:
+  counts: data/raw/gse160306/GSE160306_counts.txt.gz
+  matrix: data/raw/gse160306/GSE160306_series_matrix.txt.gz
+
+reference:                        # 单细胞参考：HRCA snRNA（神经/胶质）+ 视神经 snRNA（血管细胞），cellxgene Census 固定版本
+  census_version: "2025-11-08"
+  hrca_dataset: d6505c89-c43d-4c28-8c4f-7351a5fd5528        # snRNA-seq of human retina - all cells
+  vascular_dataset: 3c364ffe-d599-44d5-a77f-6c5fd7038cf6    # snRNA-seq of human optic nerve and optic nerve head - all cells
+  cells_per_class: 4000
+  vascular_classes:
+    endothelial: [capillary endothelial cell, blood vessel endothelial cell, endothelial cell of venule]
+    pericyte: [pericyte]
+    smooth_muscle: [vascular associated smooth muscle cell]
+  out_h5ad: data/interim/retina_reference.h5ad
+  composition: results/08b_composition/hrca_composition.tsv
+
+deconvolution:
+  test_donor_fraction: 0.3        # 参考细胞按供体划分训练/测试，测试供体只用于评价
+  n_pseudobulk_train: 6000
+  n_pseudobulk_test: 1000
+  cells_per_pseudobulk: 500
+  tape_epochs: 128
+  tape_batch_size: 128
+  seeds: [22, 23, 24]
+  training_schemes: [uniform, mixed]
+  apply_training: mixed
+  ratio_exclude_markers: [RGS5, NOTCH3, PDGFRB, KCNJ8, ABCC9, ACTA2, DLL4, TEK, PLVAP, CDH5, CLDN5, PECAM1, KDR, RLBP1, VIM, GFAP, GLUL, TXNIP, JAG1, PDGFB, HEY1, HEYL, NRARP]
+  gene_map: data/raw/annotation/gencode.v36.gene.probemap
+  apply_seeds: [22, 23, 24, 25, 26]
+  ctexpr_dir: data/interim/ctexpr
+
+crosstalk:                        # stage 15：哪些内皮 / Müller 来源信号与周细胞转录本减少同步（为细胞实验选靶点）
+  source_share_min: 0.5           # 基因 bulk 信号至少一半来自该来源细胞，才用“相对该细胞标记”的比值
+  min_mean_logcpm: 1
+  n_perm: 2000
+  # 已知调控周细胞存活/覆盖的分泌或旁分泌因子（文献候选；不论来源份额都报告，并标出份额）
+  followup: [PDGFB, TXNIP]       # 组间差异达标的配体：换内皮标记数、分部位复核
+  ligands: [PDGFB, ANGPT1, ANGPT2, TEK, DLL4, JAG1, EDN1, NOS3, CCN2, TGFB1, TGFB2, VEGFA, LIF, SPP1,
+            ANGPTL4, CXCL12, APLN, HBEGF, SERPINE1, ICAM1, ESM1, TXNIP, LGALS3, IL6, CCL2, TNF, IL1B, THBS1, SEMA3A]
+
+mural_subtypes:                   # stage 16：周细胞与平滑肌能否分开（对照活体成像“平滑肌先丢”的报道）
+  min_group_mean: 0.2             # 该类细胞每核平均计数下限
+  sets:                           # 份额 = 平均视网膜组成下该类细胞占 bulk 信号的比例；fold = 本类 / 另一类每核均值
+    pericyte_relaxed: {cell: pericyte, share: 0.4, fold: 2}
+    pericyte_strict: {cell: pericyte, share: 0.5, fold: 4}
+    smc_relaxed: {cell: smooth_muscle, share: 0.4, fold: 2}
+    smc_strict: {cell: smooth_muscle, share: 0.5, fold: 4}
+  classic:                        # 文献经典标记（bulk 中有节细胞/Müller 渗漏，只作敏感性）
+    pericyte_classic: [KCNJ8, ABCC9, HIGD1B, RGS5, ANPEP, NDUFA4L2]
+    smc_classic: [MYH11, ACTA2, CNN1, DES, TAGLN, MYOCD]
+  n_perm: 2000
+
+mural_state:                      # stage 18a：壁细胞“状态”改变——单基因相对壁细胞含量（壁细胞富集基因的中位数）的变化
+  share_min: 0.6                  # 壁细胞在 bulk 信号中至少占 60% 的基因
+  n_perm: 2000
+  program_up: [COL1A1, COL1A2, COL3A1, COL6A3]   # 胶原程序（相对含量上升的基因，用于与 IL1RL1 的供体层面关联）
+
+foundation_model:                 # stage 17：Geneformer 在健康人周细胞上的 in silico 扰动（周细胞身份依赖哪些受体；高糖通路分子能否模拟 PDGF 信号丢失）
+  env: pericytest2_fm
+  model_dir: data/models/geneformer
+  models:                         # 名称: [子目录, 版本, 输入长度]
+    V2-104M: [Geneformer-V2-104M, V2, 4096]
+    V2-316M: [Geneformer-V2-316M, V2, 4096]
+    V1-10M: [Geneformer-V1-10M, V1, 2048]
+  primary_model: V2-104M
+  min_genes: 800                  # 细胞至少检出基因数（太少的核嵌入不稳）
+  cells_screen: {pericyte: 200, smooth_muscle: 200}       # 全基因组逐个删除的细胞数（主模型）
+  cells_screen_replicate: {pericyte: 60, smooth_muscle: 60}    # 另两个模型复核用（316M 在共享 GPU 上很慢）
+  cells_centroid: 150             # 每类细胞用于算类中心的细胞数（与扰动细胞不重叠）
+  min_cell_frac: 0.3              # 基因至少在 30% 被扰动细胞中检出才进入基因层面汇总
+  rank_bins: 20                   # 按基因在细胞内的排名位置分箱，作为删除效应的位置校正
+  emb_layer: -2                   # 取倒数第二层（Geneformer 推荐的通用嵌入层）
+  batch_size: 64
+  receptor_db: data/raw/omnipath/ligrec_interactions.tsv
+  receptor_min_sources: 2         # 受体至少被 2 个数据库收录
+  # 高糖相关通路：模拟“上调”（把基因移到排名最前），看是否与删除 PDGFRB 方向一致
+  overexpress: [PTPN6, PRKCD, TXNIP, PTPN1, PTPN11, CBL, SOCS3, PRKCB]
+  delete_reference: PDGFRB
+  n_null_overexpress: 200         # 随机基因过表达零分布（按表达排名匹配）
+
+fm_state_match:                   # stage 18b/c：哪个受体的 in silico 删除最像糖尿病供体中的壁细胞状态改变
+  leave_out: [IL1RL1, EDNRA, NOTCH3, ADAMTS4]    # 签名内的候选基因：评价它们时用去掉自身的签名
+  n_shuffle: 100                  # 打乱签名的次数（特异性零分布）
+  focus: [IL1RL1, PDGFRB, NOTCH3, EDNRA, TGFBR2, LRP1, ITGB1]
+  focus_min_cells: 10             # 检出率低于 30% 的重点基因（如 IL1RL1）至少 10 个细胞才报告，单列标注
+
+state_support:                    # stage 19：芯片独立复现、8 标记逐个留出、IL-33 来源与 DME 敏感性
+  chip_dir: data/raw/gse228900
+  chip_genes: [PDGFB, PDGFRB, RGS5, KCNJ8, NOTCH3, TXNIP, IL1RL1, ADAMTS4, COL1A1, COL3A1, IL33, PECAM1, CDH5]
+  chip_min_logcpm: 2
+  n_perm: 2000
+
+composition_check:                # stage 20：周细胞/平滑肌组成能否解释 IL1RL1 与胶原的比值改变
+  exclude_state_genes: [IL1RL1, ADAMTS4]
+  collagen: [COL1A1, COL1A2, COL3A1, COL6A3]
+  n_perm: 2000
+
+state_structure:                  # stage 21：壁细胞状态基因在供体间的共变结构（热图 + 相关矩阵）
+  genes: [IL1RL1, ADAMTS4, EDNRA, GJA4, COL1A1, COL1A2, COL3A1, COL6A3]
+
+reference_umap:                   # stage 22：单细胞参考的 UMAP 与关键基因在各细胞类型的表达（仅作展示）
+  n_hvg: 2000
+  n_pcs: 30
+  n_neighbors: 15
+  genes: [PDGFRB, RGS5, IL1RL1, ADAMTS4, COL1A2, COL3A1, MYH11, PECAM1, PDGFB, TXNIP, RLBP1, IL33, GFAP]
+
+wetlab:                           # stage 23：人视网膜周细胞（HRPC）实验；原始数据为实验室交付的 pptx（数值表 + WB 图），只读解析
+  source: data/raw/wetlab/wetlab_data_20261116.pptx
+  groups: [NG, NG+PDGF-BB, HG, HG+PDGF-BB, MAN, MAN+PDGF-BB]
+  sirna_groups: [siNC, siIL1RL1-1, siIL1RL1-2]
+  # slide → 测量（slide 1 WB 比值；2 刺激 1 h qPCR；3 刺激 24 h qPCR；4 上清 sST2 ELISA；5–6 siRNA 72 h qPCR）
+  blots: {p_PDGFRB: image2.png, PDGFRB: image1.png, GAPDH: image3.png}          # 正文裁剪条带（GAPDH 按 pptx srcRect 裁剪）
+  blots_full: {p_PDGFRB: image5.png, PDGFRB: image4.png, GAPDH: image6.png}     # 未裁剪全膜（补充图）
