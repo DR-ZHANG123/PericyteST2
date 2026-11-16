@@ -1,7 +1,7 @@
 # PericyteST2
 
-Code for the study *High glucose uncouples PDGF-B from ST2 in retinal pericytes, matching an
-IL1RL1-low, collagen-high mural-cell state in human diabetic retinopathy*.
+Code for the study *High glucose weakens PDGF-B-driven ST2 induction in human retinal pericytes,
+mirroring an IL1RL1-low, collagen-high mural signature in diabetic retinopathy*.
 
 The analysis has two halves. The first reads human donor retina (GEO GSE160306) against a
 single-nucleus reference of 13 retinal cell classes, establishes by deconvolution which cells bulk

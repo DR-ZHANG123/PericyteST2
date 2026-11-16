@@ -5,7 +5,7 @@
   交互作用（HG 中的 PDGF-BB 效应 − NG 中的效应；MAN 同理）——即高糖是否削弱 PDGF-BB 应答，甘露醇是否同样削弱；
   以及 HG 与 MAN 直接比较（高糖效应是否超出等渗透压对照）。
 siRNA：log2(值) ~ 组，两条 siIL1RL1 各自对 siNC。
-输出 results/23_wetlab/contrasts.tsv、group_summary.tsv。
+输出 results/23_wetlab/contrasts.tsv（含以独立实验为区组重算的 P 值）、group_summary.tsv。
 """
 from __future__ import annotations
 
@@ -36,6 +36,27 @@ FACTORIAL = {
 SIRNA = {"siIL1RL1-1 vs siNC": {"siIL1RL1-1": 1, "siNC": -1}, "siIL1RL1-2 vs siNC": {"siIL1RL1-2": 1, "siNC": -1}}
 
 
+def block_pvalues(d: pd.DataFrame, spec: dict) -> dict:
+    """同一天完成的六个组属于同一次独立实验：把实验次序作为区组（randomized block）重算 P 值，作为敏感性分析。"""
+    y = np.log2(d.value.values)
+    g = pd.get_dummies(d.group, drop_first=False).astype(float)
+    b = pd.get_dummies(d.replicate.astype(str), drop_first=True).astype(float)
+    X = np.column_stack([g.values, b.values]) if b.shape[1] else g.values
+    beta, *_ = np.linalg.lstsq(X, y, rcond=None)
+    resid = y - X @ beta
+    df = len(y) - np.linalg.matrix_rank(X)
+    s2 = float(resid @ resid / df)
+    XtX_inv = np.linalg.pinv(X.T @ X)
+    out = {}
+    for name, w in spec.items():
+        c = np.zeros(X.shape[1])
+        for k, v in w.items():
+            c[list(g.columns).index(k)] = v
+        est = float(c @ beta); se = float(np.sqrt(s2 * (c @ XtX_inv @ c)))
+        out[name] = (2 * stats.t.sf(abs(est / se), df), df)
+    return out
+
+
 def contrasts(d: pd.DataFrame, spec: dict) -> list[dict]:
     y = np.log2(d.value)
     g = d.group
@@ -59,8 +80,11 @@ def main() -> None:
     rows = []
     for (exp, rd), d in m.groupby(["experiment", "readout"], sort=False):
         spec = SIRNA if exp.startswith("sirna") else FACTORIAL
+        blk = block_pvalues(d, spec)
         for r in contrasts(d, spec):
-            rows.append(dict(experiment=exp, readout=rd, n_per_group=int(d.groupby("group").size().min()), **r))
+            p_blk, df_blk = blk[r["contrast"]]
+            rows.append(dict(experiment=exp, readout=rd, n_per_group=int(d.groupby("group").size().min()), **r,
+                             p_block=p_blk, df_block=df_blk))
     c = pd.DataFrame(rows)
     c.to_csv(out / "contrasts.tsv", sep="\t", index=False, float_format="%.6g")
     s = (m.assign(log2=np.log2(m.value)).groupby(["experiment", "readout", "group"], sort=False)
